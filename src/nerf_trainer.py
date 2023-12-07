@@ -46,6 +46,7 @@ class FrameManager:
             new_frame = Frame(img[i], poses[i], self.f)
             self.train_frames.append(new_frame)
 
+
 class Frame:
     def __init__(self, image, pose, f):
         self.img = image
@@ -146,7 +147,7 @@ class Model(nn.Module):
         for layer in self.hidden_layer_block_1:
             x = nn.functional.relu(layer(x))
         # print(x.dtype)
-        skip_connection = torch.cat((encoded_position, x), dim=1)
+        skip_connection = torch.cat((x, encoded_position), dim=-1)
         x = nn.functional.relu(self.skip_connection_layer(skip_connection))
         # print(x.dtype)
         for layer in self.hidden_layer_block_2:
@@ -225,7 +226,7 @@ def render_rays(model, frame):
 def train(model, epochs, data, learning_rate = 5e-4):
     optimizer = optim.Adam(model.parameters(), lr = learning_rate)
     # print()
-    index_test = 9
+    index_test = 101
     count = 0
     for fr in data.train_frames:
         # print("Getting rays and sampling")
@@ -258,7 +259,7 @@ def train(model, epochs, data, learning_rate = 5e-4):
       loss.backward()
       optimizer.step()
       if i % 25 == 0:
-        torch.save(model.state_dict(), 'nerf_3.pt')
+        torch.save(model.state_dict(), 'nerf_2.pt')
         test(model, data, index_test,i, loss) ## test on same test image each epoch
     
     return loss
@@ -271,10 +272,6 @@ def test(model, data, index_test, epoch, loss):
     sample_frame(fr, 64, 2, 6, dev = 'cuda:0')
     predicted = render_rays(model, fr)
     predicted = predicted.detach().cpu().numpy()
-    # loss = torch.nn.functional.mse_loss(predicted.reshape([fr.img.shape[0], fr.img.shape[1], fr.img.shape[2]-1]), img[:, :, :-1])
-    # print("Loss:", loss.item())
-    # if(epoch%25 == 0):
-        # plt.imshow(fr.img)
     plt.imshow(predicted.reshape([100, 100, 3]))
     plt.savefig(f'test_img_{index_test}_epoch_{epoch}.png')
     plt.close()
@@ -286,7 +283,9 @@ if __name__ == '__main__':
     gc.collect()
     torch.cuda.empty_cache()
     model = Model()
-    state_dict = torch.load('nerf_3.pt')
+    state_dict = torch.load('nerf_2.pt')
+    # for key in list(state_dict.keys()):
+    #     state_dict[key.replace('rgb_filters.weight', 'rgb_layer.weight'). replace('rgb_filters.bias', 'rgb_layer.bias')] = state_dict.pop(key)
     model.load_state_dict(state_dict)
     model.to(device)
     loss = train(model, 10000, frameManager)
